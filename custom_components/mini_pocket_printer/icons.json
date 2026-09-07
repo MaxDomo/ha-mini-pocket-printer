@@ -1,0 +1,63 @@
+{
+  "entity": {
+    "sensor": {
+      "last_print": {
+        "default": "mdi:receipt-text-clock"
+      },
+      "battery": {
+        "default": "mdi:battery"
+      },
+      "rssi": {
+        "default": "mdi:signal"
+      },
+      "queue": {
+        "default": "mdi:tray-full"
+      }
+    },
+    "binary_sensor": {
+      "paper": {
+        "default": "mdi:printer-alert",
+        "state": {
+          "off": "mdi:receipt-text"
+        }
+      }
+    },
+    "button": {
+      "test": {
+        "default": "mdi:printer-check"
+      },
+      "cancel": {
+        "default": "mdi:playlist-remove"
+      },
+      "refresh": {
+        "default": "mdi:refresh"
+      }
+    },
+    "select": {
+      "density": {
+        "default": "mdi:contrast-circle"
+      }
+    },
+    "number": {
+      "sleep": {
+        "default": "mdi:sleep"
+      },
+      "queue_limit": {
+        "default": "mdi:tray-full"
+      },
+      "keep_awake": {
+        "default": "mdi:timer-sync-outline"
+      }
+    }
+  },
+  "services": {
+    "print_text": "mdi:printer-pos",
+    "print_image": "mdi:image",
+    "print_weather": "mdi:weather-partly-cloudy",
+    "feed": "mdi:arrow-down-bold-box",
+    "print_table": "mdi:table",
+    "print_qr": "mdi:qrcode",
+    "print_barcode": "mdi:barcode",
+    "cancel": "mdi:playlist-remove"
+  }
+}

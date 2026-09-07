@@ -1,0 +1,32 @@
+{
+  "config": {
+    "flow_title": "{name}",
+    "step": {
+      "confirm": {
+        "description": "Ajouter l'imprimante {name} ?"
+      },
+      "user": {
+        "data": {
+          "address": "Imprimante"
+        }
+      }
+    },
+    "abort": {
+      "no_devices_found": "Aucune imprimante détectée. Allumez-la et vérifiez qu'aucun autre appareil ne la retient.",
+      "already_configured": "Cette imprimante est déjà configurée."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "queue_limit": "Travaux maximum en file (0 = illimite)",
+          "keep_awake": "Interrogation periodique, en minutes (0 = aucune)",
+          "transport": "Transport : ble, spp, usb ou auto",
+          "usb_path": "Peripherique USB (vide = aucun)"
+        },
+        "description": "À n'activer que si vous n'avez qu'une seule imprimante : plusieurs exemplaires annoncent le même nom."
+      }
+    }
+  }
+}

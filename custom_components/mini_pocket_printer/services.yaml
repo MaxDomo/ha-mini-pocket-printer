@@ -1,0 +1,388 @@
+print_text:
+  name: Imprimer du texte
+  description: Rend le texte en bitmap 384 px et l'envoie a l'imprimante.
+  target:
+    device:
+      multiple: true
+  fields:
+    text:
+      name: Texte
+      description: Sauts de ligne autorises. Les lignes trop larges sont repliees.
+      required: true
+      example: "Liste des courses\nPain\nLait"
+      selector:
+        text:
+          multiline: true
+    size:
+      name: Corps
+      default: 36
+      selector:
+        number:
+          min: 8
+          max: 96
+    font:
+      name: Police
+      description: >
+        receipt (machine a ecrire), receipt-bold, dotmatrix (matriciel), ou le
+        chemin d'un .ttf. Par defaut : receipt.
+      default: receipt
+      selector:
+        select:
+          custom_value: true
+          options:
+            - receipt
+            - receipt-bold
+            - dotmatrix
+    align:
+      name: Alignement
+      default: left
+      selector:
+        select:
+          options: [left, center, right]
+    bold:
+      name: Gras
+      default: false
+      selector:
+        boolean:
+    spacing:
+      name: Interligne
+      default: 6
+      selector:
+        number:
+          min: 0
+          max: 40
+    feed:
+      name: Avance papier
+      description: Points d'avance en fin de travail.
+      default: 80
+      selector:
+        number:
+          min: 0
+          max: 255
+
+print_table:
+  name: Imprimer un tableau
+  description: >
+    Compose un tableau : largeurs de colonnes deduites du contenu, cellules
+    trop longues repliees plutot que tronquees.
+  target:
+    device:
+      multiple: true
+  fields:
+    rows:
+      name: Lignes
+      description: Liste de listes, une liste par ligne du tableau.
+      required: true
+      example: "[[\"Pain\", 2, \"3,20\"], [\"Cafe\", 1, \"7,50\"]]"
+      selector:
+        object:
+    headers:
+      name: En-tetes
+      description: Noms des colonnes, imprimes en gras au-dessus d'un filet.
+      example: "[\"Article\", \"Qte\", \"Prix\"]"
+      selector:
+        object:
+    title:
+      name: Titre
+      example: COURSES
+      selector:
+        text:
+    align:
+      name: Alignements
+      description: left, center ou right, un par colonne.
+      example: "[\"left\", \"center\", \"right\"]"
+      selector:
+        object:
+    size:
+      name: Corps
+      default: 30
+      selector:
+        number:
+          min: 8
+          max: 96
+    font:
+      name: Police
+      default: receipt
+      selector:
+        select:
+          custom_value: true
+          options:
+            - receipt
+            - receipt-bold
+            - dotmatrix
+    bold:
+      name: Gras
+      default: false
+      selector:
+        boolean:
+    grid:
+      name: Filets
+      description: Trait de separation entre les lignes.
+      default: true
+      selector:
+        boolean:
+    feed:
+      name: Avance papier
+      default: 80
+      selector:
+        number:
+          min: 0
+          max: 255
+
+print_qr:
+  name: Imprimer un QR code
+  description: Genere un QR code centre, avec legende optionnelle.
+  target:
+    device:
+      multiple: true
+  fields:
+    data:
+      name: Contenu
+      description: Texte, URL, identifiant Wi-Fi...
+      required: true
+      example: https://home-assistant.io
+      selector:
+        text:
+    scale:
+      name: Taille du module
+      description: Pixels par module. Reduit automatiquement si le code deborde.
+      default: 8
+      selector:
+        number:
+          min: 2
+          max: 16
+    border:
+      name: Marge
+      description: Modules de silence autour du code. 2 minimum pour un scan fiable.
+      default: 2
+      selector:
+        number:
+          min: 0
+          max: 8
+    error_correction:
+      name: Correction d'erreur
+      description: H resiste mieux aux bavures du papier thermique.
+      default: M
+      selector:
+        select:
+          options: [L, M, Q, H]
+    label:
+      name: Legende
+      example: Wi-Fi invites
+      selector:
+        text:
+    label_size:
+      name: Corps de la legende
+      default: 26
+      selector:
+        number:
+          min: 8
+          max: 64
+    font:
+      name: Police
+      default: receipt
+      selector:
+        select:
+          custom_value: true
+          options: [receipt, receipt-bold, dotmatrix]
+    feed:
+      name: Avance papier
+      default: 80
+      selector:
+        number:
+          min: 0
+          max: 255
+
+print_barcode:
+  name: Imprimer un code-barres
+  description: >
+    Code-barres 1D mis a l'echelle sur la largeur du papier. Chaque symbologie
+    impose son format : ean13 exige 12 ou 13 chiffres, code128 accepte tout.
+  target:
+    device:
+      multiple: true
+  fields:
+    data:
+      name: Contenu
+      required: true
+      example: "3760123456789"
+      selector:
+        text:
+    symbology:
+      name: Symbologie
+      default: code128
+      selector:
+        select:
+          custom_value: true
+          options: [code128, code39, ean13, ean8, upca, isbn13, itf, codabar, pzn]
+    height:
+      name: Hauteur
+      description: Hauteur des barres en points.
+      default: 90
+      selector:
+        number:
+          min: 30
+          max: 300
+    show_text:
+      name: Valeur sous les barres
+      default: true
+      selector:
+        boolean:
+    label:
+      name: Legende
+      selector:
+        text:
+    label_size:
+      name: Corps de la legende
+      default: 24
+      selector:
+        number:
+          min: 8
+          max: 64
+    font:
+      name: Police
+      default: receipt
+      selector:
+        select:
+          custom_value: true
+          options: [receipt, receipt-bold, dotmatrix]
+    feed:
+      name: Avance papier
+      default: 80
+      selector:
+        number:
+          min: 0
+          max: 255
+
+print_image:
+  name: Imprimer une image
+  description: Redimensionne sur 384 px de large puis trame l'image.
+  target:
+    device:
+      multiple: true
+  fields:
+    path:
+      name: Chemin local
+      description: Doit etre dans un dossier autorise (allowlist_external_dirs).
+      example: /config/www/logo.png
+      selector:
+        text:
+    url:
+      name: URL
+      example: https://exemple.fr/image.png
+      selector:
+        text:
+    threshold:
+      name: Seuil
+      description: Vide pour un tramage Floyd-Steinberg, sinon seuil fixe.
+      selector:
+        number:
+          min: 0
+          max: 255
+    invert:
+      name: Inverser
+      default: false
+      selector:
+        boolean:
+    feed:
+      name: Avance papier
+      default: 80
+      selector:
+        number:
+          min: 0
+          max: 255
+
+print_weather:
+  name: Imprimer la meteo
+  description: >
+    Compose un ticket a partir d'une entite weather : conditions du moment
+    et previsions des prochains jours.
+  target:
+    device:
+      multiple: true
+  fields:
+    weather_entity:
+      name: Entite meteo
+      description: L'entite weather a lire (la cible designe l'imprimante).
+      required: true
+      example: weather.home
+      selector:
+        entity:
+          domain: weather
+    days:
+      name: Jours de prevision
+      description: 0 pour n'imprimer que les conditions actuelles.
+      default: 4
+      selector:
+        number:
+          min: 0
+          max: 7
+    title:
+      name: Titre
+      default: METEO
+      selector:
+        text:
+    size:
+      name: Corps
+      description: >
+        Les colonnes du ticket s'adaptent automatiquement au corps choisi.
+      default: 36
+      selector:
+        number:
+          min: 8
+          max: 48
+    font:
+      name: Police
+      description: >
+        receipt (machine a ecrire), receipt-bold, dotmatrix (matriciel), ou le
+        chemin d'un .ttf. Par defaut : receipt.
+      default: receipt
+      selector:
+        select:
+          custom_value: true
+          options:
+            - receipt
+            - receipt-bold
+            - dotmatrix
+    bold:
+      name: Gras
+      default: false
+      selector:
+        boolean:
+    feed:
+      name: Avance papier
+      default: 80
+      selector:
+        number:
+          min: 0
+          max: 255
+    icons:
+      name: Pictogrammes
+      description: Illustre le ticket. Decochez pour une version tout en texte.
+      default: true
+      selector:
+        boolean:
+
+cancel:
+  name: Annuler la file d'attente
+  description: >
+    Retire les travaux qui attendent leur tour. Le travail en cours n'est pas
+    interrompu : son bitmap est deja partiellement transmis.
+  target:
+    device:
+      multiple: true
+
+feed:
+  name: Avance papier
+  description: Fait avancer le papier du nombre de points indique.
+  target:
+    device:
+      multiple: true
+  fields:
+    dots:
+      name: Points
+      default: 80
+      selector:
+        number:
+          min: 1
+          max: 255
