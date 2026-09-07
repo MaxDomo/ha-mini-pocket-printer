@@ -1,13 +1,12 @@
 print_text:
   name: Imprimer du texte
-  description: Rend le texte en bitmap 384 px et l'envoie a l'imprimante.
+  description: Rend le texte en bitmap 384 px et l'envoie à l'imprimante.
   target:
-    device:
-      multiple: true
+    device: {}
   fields:
     text:
       name: Texte
-      description: Sauts de ligne autorises. Les lignes trop larges sont repliees.
+      description: Sauts de ligne autorisés. Les lignes trop larges sont repliées.
       required: true
       example: "Liste des courses\nPain\nLait"
       selector:
@@ -63,11 +62,10 @@ print_text:
 print_table:
   name: Imprimer un tableau
   description: >
-    Compose un tableau : largeurs de colonnes deduites du contenu, cellules
-    trop longues repliees plutot que tronquees.
+    Compose un tableau : largeurs de colonnes déduites du contenu, cellules
+    trop longues repliées plutot que tronquées.
   target:
-    device:
-      multiple: true
+    device: {}
   fields:
     rows:
       name: Lignes
@@ -117,7 +115,7 @@ print_table:
         boolean:
     grid:
       name: Filets
-      description: Trait de separation entre les lignes.
+      description: Trait de séparation entre les lignes.
       default: true
       selector:
         boolean:
@@ -131,10 +129,9 @@ print_table:
 
 print_qr:
   name: Imprimer un QR code
-  description: Genere un QR code centre, avec legende optionnelle.
+  description: Génère un QR code centré, avec légende optionnelle.
   target:
-    device:
-      multiple: true
+    device: {}
   fields:
     data:
       name: Contenu
@@ -145,7 +142,7 @@ print_qr:
         text:
     scale:
       name: Taille du module
-      description: Pixels par module. Reduit automatiquement si le code deborde.
+      description: Pixels par module. Réduit automatiquement si le code déborde.
       default: 8
       selector:
         number:
@@ -161,7 +158,7 @@ print_qr:
           max: 8
     error_correction:
       name: Correction d'erreur
-      description: H resiste mieux aux bavures du papier thermique.
+      description: H résiste mieux aux bavures du papier thermique.
       default: M
       selector:
         select:
@@ -172,7 +169,7 @@ print_qr:
       selector:
         text:
     label_size:
-      name: Corps de la legende
+      name: Corps de la légende
       default: 26
       selector:
         number:
@@ -196,11 +193,10 @@ print_qr:
 print_barcode:
   name: Imprimer un code-barres
   description: >
-    Code-barres 1D mis a l'echelle sur la largeur du papier. Chaque symbologie
+    Code-barres 1D mis à l'échelle sur la largeur du papier. Chaque symbologie
     impose son format : ean13 exige 12 ou 13 chiffres, code128 accepte tout.
   target:
-    device:
-      multiple: true
+    device: {}
   fields:
     data:
       name: Contenu
@@ -233,7 +229,7 @@ print_barcode:
       selector:
         text:
     label_size:
-      name: Corps de la legende
+      name: Corps de la légende
       default: 24
       selector:
         number:
@@ -258,12 +254,11 @@ print_image:
   name: Imprimer une image
   description: Redimensionne sur 384 px de large puis trame l'image.
   target:
-    device:
-      multiple: true
+    device: {}
   fields:
     path:
       name: Chemin local
-      description: Doit etre dans un dossier autorise (allowlist_external_dirs).
+      description: Doit etre dans un dossier autorisé (allowlist_external_dirs).
       example: /config/www/logo.png
       selector:
         text:
@@ -295,22 +290,21 @@ print_image:
 print_weather:
   name: Imprimer la meteo
   description: >
-    Compose un ticket a partir d'une entite weather : conditions du moment
-    et previsions des prochains jours.
+    Compose un ticket à partir d'une entité weather : conditions du moment
+    et prévisions des prochains jours.
   target:
-    device:
-      multiple: true
+    device: {}
   fields:
     weather_entity:
       name: Entite meteo
-      description: L'entite weather a lire (la cible designe l'imprimante).
+      description: L'entité weather a lire (la cible designe l'imprimante).
       required: true
       example: weather.home
       selector:
         entity:
           domain: weather
     days:
-      name: Jours de prevision
+      name: Jours de prévision
       description: 0 pour n'imprimer que les conditions actuelles.
       default: 4
       selector:
@@ -325,7 +319,7 @@ print_weather:
     size:
       name: Corps
       description: >
-        Les colonnes du ticket s'adaptent automatiquement au corps choisi.
+        Les colonnes du ticket s'adaptént automatiquement au corps choisi.
       default: 36
       selector:
         number:
@@ -358,7 +352,7 @@ print_weather:
           max: 255
     icons:
       name: Pictogrammes
-      description: Illustre le ticket. Decochez pour une version tout en texte.
+      description: Illustre le ticket. Décochez pour une version tout en texte.
       default: true
       selector:
         boolean:
@@ -367,17 +361,15 @@ cancel:
   name: Annuler la file d'attente
   description: >
     Retire les travaux qui attendent leur tour. Le travail en cours n'est pas
-    interrompu : son bitmap est deja partiellement transmis.
+    interrompu : son bitmap est déjà partiellement transmis.
   target:
-    device:
-      multiple: true
+    device: {}
 
 feed:
   name: Avance papier
   description: Fait avancer le papier du nombre de points indique.
   target:
-    device:
-      multiple: true
+    device: {}
   fields:
     dots:
       name: Points
