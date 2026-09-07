@@ -1,9 +1,14 @@
 print_text:
   name: Imprimer du texte
   description: Rend le texte en bitmap 384 px et l'envoie à l'imprimante.
-  target:
-    device: {}
   fields:
+    device_id:
+      name: Imprimante
+      description: Laisser vide s'il n'y en a qu'une.
+      selector:
+        device:
+          integration: mini_pocket_printer
+          multiple: true
     text:
       name: Texte
       description: Sauts de ligne autorisés. Les lignes trop larges sont repliées.
@@ -21,9 +26,10 @@ print_text:
           max: 96
     font:
       name: Police
-      description: >
-        receipt (machine a ecrire), receipt-bold, dotmatrix (matriciel), ou le
-        chemin d'un .ttf. Par defaut : receipt.
+      description: 'receipt (machine a ecrire), receipt-bold, dotmatrix (matriciel), ou le
+        chemin d''un .ttf. Par defaut : receipt.
+
+        '
       default: receipt
       selector:
         select:
@@ -37,12 +43,15 @@ print_text:
       default: left
       selector:
         select:
-          options: [left, center, right]
+          options:
+            - left
+            - center
+            - right
     bold:
       name: Gras
       default: false
       selector:
-        boolean:
+        boolean: null
     spacing:
       name: Interligne
       default: 6
@@ -58,39 +67,44 @@ print_text:
         number:
           min: 0
           max: 255
-
 print_table:
   name: Imprimer un tableau
-  description: >
-    Compose un tableau : largeurs de colonnes déduites du contenu, cellules
-    trop longues repliées plutot que tronquées.
-  target:
-    device: {}
+  description: 'Compose un tableau : largeurs de colonnes déduites du contenu, cellules trop
+    longues repliées plutot que tronquées.
+
+    '
   fields:
+    device_id:
+      name: Imprimante
+      description: Laisser vide s'il n'y en a qu'une.
+      selector:
+        device:
+          integration: mini_pocket_printer
+          multiple: true
     rows:
       name: Lignes
       description: Liste de listes, une liste par ligne du tableau.
       required: true
-      example: "[[\"Pain\", 2, \"3,20\"], [\"Cafe\", 1, \"7,50\"]]"
+      example: '[["Pain", 2, "3,20"], ["Cafe", 1, "7,50"]]'
       selector:
-        object:
+        object: null
     headers:
       name: En-tetes
       description: Noms des colonnes, imprimes en gras au-dessus d'un filet.
-      example: "[\"Article\", \"Qte\", \"Prix\"]"
+      example: '["Article", "Qte", "Prix"]'
       selector:
-        object:
+        object: null
     title:
       name: Titre
       example: COURSES
       selector:
-        text:
+        text: null
     align:
       name: Alignements
       description: left, center ou right, un par colonne.
-      example: "[\"left\", \"center\", \"right\"]"
+      example: '["left", "center", "right"]'
       selector:
-        object:
+        object: null
     size:
       name: Corps
       default: 30
@@ -112,13 +126,13 @@ print_table:
       name: Gras
       default: false
       selector:
-        boolean:
+        boolean: null
     grid:
       name: Filets
       description: Trait de séparation entre les lignes.
       default: true
       selector:
-        boolean:
+        boolean: null
     feed:
       name: Avance papier
       default: 80
@@ -126,20 +140,24 @@ print_table:
         number:
           min: 0
           max: 255
-
 print_qr:
   name: Imprimer un QR code
   description: Génère un QR code centré, avec légende optionnelle.
-  target:
-    device: {}
   fields:
+    device_id:
+      name: Imprimante
+      description: Laisser vide s'il n'y en a qu'une.
+      selector:
+        device:
+          integration: mini_pocket_printer
+          multiple: true
     data:
       name: Contenu
       description: Texte, URL, identifiant Wi-Fi...
       required: true
       example: https://home-assistant.io
       selector:
-        text:
+        text: null
     scale:
       name: Taille du module
       description: Pixels par module. Réduit automatiquement si le code déborde.
@@ -162,12 +180,16 @@ print_qr:
       default: M
       selector:
         select:
-          options: [L, M, Q, H]
+          options:
+            - L
+            - M
+            - Q
+            - H
     label:
       name: Legende
       example: Wi-Fi invites
       selector:
-        text:
+        text: null
     label_size:
       name: Corps de la légende
       default: 26
@@ -181,7 +203,10 @@ print_qr:
       selector:
         select:
           custom_value: true
-          options: [receipt, receipt-bold, dotmatrix]
+          options:
+            - receipt
+            - receipt-bold
+            - dotmatrix
     feed:
       name: Avance papier
       default: 80
@@ -189,28 +214,42 @@ print_qr:
         number:
           min: 0
           max: 255
-
 print_barcode:
   name: Imprimer un code-barres
-  description: >
-    Code-barres 1D mis à l'échelle sur la largeur du papier. Chaque symbologie
+  description: 'Code-barres 1D mis à l''échelle sur la largeur du papier. Chaque symbologie
     impose son format : ean13 exige 12 ou 13 chiffres, code128 accepte tout.
-  target:
-    device: {}
+
+    '
   fields:
+    device_id:
+      name: Imprimante
+      description: Laisser vide s'il n'y en a qu'une.
+      selector:
+        device:
+          integration: mini_pocket_printer
+          multiple: true
     data:
       name: Contenu
       required: true
-      example: "3760123456789"
+      example: '3760123456789'
       selector:
-        text:
+        text: null
     symbology:
       name: Symbologie
       default: code128
       selector:
         select:
           custom_value: true
-          options: [code128, code39, ean13, ean8, upca, isbn13, itf, codabar, pzn]
+          options:
+            - code128
+            - code39
+            - ean13
+            - ean8
+            - upca
+            - isbn13
+            - itf
+            - codabar
+            - pzn
     height:
       name: Hauteur
       description: Hauteur des barres en points.
@@ -223,11 +262,11 @@ print_barcode:
       name: Valeur sous les barres
       default: true
       selector:
-        boolean:
+        boolean: null
     label:
       name: Legende
       selector:
-        text:
+        text: null
     label_size:
       name: Corps de la légende
       default: 24
@@ -241,7 +280,10 @@ print_barcode:
       selector:
         select:
           custom_value: true
-          options: [receipt, receipt-bold, dotmatrix]
+          options:
+            - receipt
+            - receipt-bold
+            - dotmatrix
     feed:
       name: Avance papier
       default: 80
@@ -249,24 +291,28 @@ print_barcode:
         number:
           min: 0
           max: 255
-
 print_image:
   name: Imprimer une image
   description: Redimensionne sur 384 px de large puis trame l'image.
-  target:
-    device: {}
   fields:
+    device_id:
+      name: Imprimante
+      description: Laisser vide s'il n'y en a qu'une.
+      selector:
+        device:
+          integration: mini_pocket_printer
+          multiple: true
     path:
       name: Chemin local
       description: Doit etre dans un dossier autorisé (allowlist_external_dirs).
       example: /config/www/logo.png
       selector:
-        text:
+        text: null
     url:
       name: URL
       example: https://exemple.fr/image.png
       selector:
-        text:
+        text: null
     threshold:
       name: Seuil
       description: Vide pour un tramage Floyd-Steinberg, sinon seuil fixe.
@@ -278,7 +324,7 @@ print_image:
       name: Inverser
       default: false
       selector:
-        boolean:
+        boolean: null
     feed:
       name: Avance papier
       default: 80
@@ -286,15 +332,20 @@ print_image:
         number:
           min: 0
           max: 255
-
 print_weather:
   name: Imprimer la meteo
-  description: >
-    Compose un ticket à partir d'une entité weather : conditions du moment
-    et prévisions des prochains jours.
-  target:
-    device: {}
+  description: 'Compose un ticket à partir d''une entité weather : conditions du moment et
+    prévisions des prochains jours.
+
+    '
   fields:
+    device_id:
+      name: Imprimante
+      description: Laisser vide s'il n'y en a qu'une.
+      selector:
+        device:
+          integration: mini_pocket_printer
+          multiple: true
     weather_entity:
       name: Entite meteo
       description: L'entité weather a lire (la cible designe l'imprimante).
@@ -315,11 +366,12 @@ print_weather:
       name: Titre
       default: METEO
       selector:
-        text:
+        text: null
     size:
       name: Corps
-      description: >
-        Les colonnes du ticket s'adaptént automatiquement au corps choisi.
+      description: 'Les colonnes du ticket s''adaptént automatiquement au corps choisi.
+
+        '
       default: 36
       selector:
         number:
@@ -327,9 +379,10 @@ print_weather:
           max: 48
     font:
       name: Police
-      description: >
-        receipt (machine a ecrire), receipt-bold, dotmatrix (matriciel), ou le
-        chemin d'un .ttf. Par defaut : receipt.
+      description: 'receipt (machine a ecrire), receipt-bold, dotmatrix (matriciel), ou le
+        chemin d''un .ttf. Par defaut : receipt.
+
+        '
       default: receipt
       selector:
         select:
@@ -342,7 +395,7 @@ print_weather:
       name: Gras
       default: false
       selector:
-        boolean:
+        boolean: null
     feed:
       name: Avance papier
       default: 80
@@ -355,22 +408,32 @@ print_weather:
       description: Illustre le ticket. Décochez pour une version tout en texte.
       default: true
       selector:
-        boolean:
-
+        boolean: null
 cancel:
   name: Annuler la file d'attente
-  description: >
-    Retire les travaux qui attendent leur tour. Le travail en cours n'est pas
+  description: 'Retire les travaux qui attendent leur tour. Le travail en cours n''est pas
     interrompu : son bitmap est déjà partiellement transmis.
-  target:
-    device: {}
 
+    '
+  fields:
+    device_id:
+      name: Imprimante
+      description: Laisser vide s'il n'y en a qu'une.
+      selector:
+        device:
+          integration: mini_pocket_printer
+          multiple: true
 feed:
   name: Avance papier
   description: Fait avancer le papier du nombre de points indique.
-  target:
-    device: {}
   fields:
+    device_id:
+      name: Imprimante
+      description: Laisser vide s'il n'y en a qu'une.
+      selector:
+        device:
+          integration: mini_pocket_printer
+          multiple: true
     dots:
       name: Points
       default: 80

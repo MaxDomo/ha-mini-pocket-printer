@@ -60,7 +60,7 @@ data:
 | `feed` | avance papier |
 | `cancel` | vide la file d'attente |
 
-Toutes acceptent une cible d'appareil, `size`, `font` et `feed`.
+Toutes acceptent `device_id`, `size`, `font` et `feed`.
 
 ### Exemples
 
@@ -235,9 +235,8 @@ chiffres. Ciblez l'appareil voulu dans vos actions.
 
 ```yaml
 action: mini_pocket_printer.print_text
-target:
-  device_id: <imprimante>
 data:
+  device_id: <imprimante>
   text: Bonjour
 ```
 
