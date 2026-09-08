@@ -32,7 +32,6 @@ class PrinterPaperSensor(BinarySensorEntity):
     _attr_device_class = BinarySensorDeviceClass.PROBLEM
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_has_entity_name = True
-    _attr_name = "Papier"
     _attr_translation_key = "paper"
     _attr_should_poll = False
 
@@ -50,7 +49,7 @@ class PrinterPaperSensor(BinarySensorEntity):
 
     @property
     def available(self) -> bool:
-        return self._printer.status_raw is not None
+        return self._printer.available and self._printer.status_raw is not None
 
     @property
     def is_on(self) -> bool | None:

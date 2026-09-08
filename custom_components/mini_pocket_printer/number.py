@@ -10,8 +10,10 @@ from homeassistant.helpers.device_registry import CONNECTION_BLUETOOTH, DeviceIn
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
+    CONF_JOB_TTL,
     CONF_KEEP_AWAKE,
     CONF_QUEUE_LIMIT,
+    DEFAULT_JOB_TTL,
     DEFAULT_KEEP_AWAKE,
     DEFAULT_QUEUE_LIMIT,
     DOMAIN,
@@ -29,6 +31,7 @@ async def async_setup_entry(
         PrinterSleepNumber(entry, printer),
         PrinterQueueLimitNumber(entry),
         PrinterKeepAwakeNumber(entry),
+        PrinterJobTtlNumber(entry),
     ])
 
 
@@ -36,7 +39,7 @@ class PrinterSleepNumber(NumberEntity):
     """Minutes avant mise en veille automatique."""
 
     _attr_has_entity_name = True
-    _attr_name = "Mise en veille"
+    _attr_translation_key = "sleep"
     _attr_entity_category = EntityCategory.CONFIG
     _attr_native_unit_of_measurement = UnitOfTime.MINUTES
     _attr_native_min_value = 0
@@ -77,7 +80,8 @@ class PrinterSleepNumber(NumberEntity):
 
     @property
     def available(self) -> bool:
-        return self._printer.sleep_minutes is not None
+        return (self._printer.available
+                and self._printer.sleep_minutes is not None)
 
     @property
     def native_value(self) -> float | None:
@@ -101,13 +105,11 @@ class _OptionNumber(NumberEntity):
     _attr_native_step = 1
     _attr_should_poll = False
 
-    def __init__(self, entry: ConfigEntry, key: str, name: str,
-                 default: int) -> None:
+    def __init__(self, entry: ConfigEntry, key: str, default: int) -> None:
         self._entry = entry
         self._key = key
         self._default = default
         self._attr_unique_id = f"{entry.entry_id}_{key}"
-        self._attr_name = name
         self._attr_translation_key = key
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
@@ -137,8 +139,7 @@ class PrinterQueueLimitNumber(_OptionNumber):
     _attr_icon = "mdi:tray-full"
 
     def __init__(self, entry: ConfigEntry) -> None:
-        super().__init__(entry, CONF_QUEUE_LIMIT, "Limite de file",
-                         DEFAULT_QUEUE_LIMIT)
+        super().__init__(entry, CONF_QUEUE_LIMIT, DEFAULT_QUEUE_LIMIT)
 
 
 class PrinterKeepAwakeNumber(_OptionNumber):
@@ -155,5 +156,20 @@ class PrinterKeepAwakeNumber(_OptionNumber):
     _attr_icon = "mdi:timer-sync-outline"
 
     def __init__(self, entry: ConfigEntry) -> None:
-        super().__init__(entry, CONF_KEEP_AWAKE, "Interrogation periodique",
-                         DEFAULT_KEEP_AWAKE)
+        super().__init__(entry, CONF_KEEP_AWAKE, DEFAULT_KEEP_AWAKE)
+
+
+class PrinterJobTtlNumber(_OptionNumber):
+    """Heures au-delà desquelles un travail en attente est abandonné.
+
+    Un ticket du matin qui sortirait en fin de journée n'intéresse personne :
+    mieux vaut le laisser tomber. 0 conserve les travaux indéfiniment.
+    """
+
+    _attr_native_min_value = 0
+    _attr_native_max_value = 48
+    _attr_native_unit_of_measurement = UnitOfTime.HOURS
+    _attr_icon = "mdi:timer-sand"
+
+    def __init__(self, entry: ConfigEntry) -> None:
+        super().__init__(entry, CONF_JOB_TTL, DEFAULT_JOB_TTL)

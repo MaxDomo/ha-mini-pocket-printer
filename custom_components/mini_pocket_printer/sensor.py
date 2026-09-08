@@ -31,7 +31,9 @@ _LOGGER = logging.getLogger(__name__)
 
 # Chaque relevé ouvre une connexion, et l'imprimante n'en accepté qu'une :
 # on espace largement, la valeur est aussi rafraichie après chaque impression.
-SCAN_INTERVAL = timedelta(hours=1)
+# Fréquence de repli. L'essentiel du rafraîchissement vient de
+# l'interrogation périodique et des impressions, qui préviennent les entités.
+SCAN_INTERVAL = timedelta(minutes=30)
 
 
 async def async_setup_entry(
@@ -57,7 +59,7 @@ class PrinterBatterySensor(SensorEntity):
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_has_entity_name = True
-    _attr_name = "Batterie"
+    _attr_translation_key = "battery"
     # Le relevé ouvre une connexion BLE qui peut durer : hors du cycle de
     # scrutation des entites, sinon Home Assistant avertit a 10 secondes.
     _attr_should_poll = False
@@ -65,6 +67,10 @@ class PrinterBatterySensor(SensorEntity):
     @property
     def native_value(self) -> int | None:
         return self._printer.battery
+
+    @property
+    def available(self) -> bool:
+        return self._printer.available and self._printer.battery is not None
 
     def __init__(self, entry: ConfigEntry, printer: MiniPocketPrinter) -> None:
         self._printer = printer
@@ -170,18 +176,26 @@ class PrinterBatterySensor(SensorEntity):
 
 
 class _PrinterEntity(SensorEntity):
-    """Base commune : rattachement à l'appareil, pas de scrutation."""
+    """Base commune : rattachement à l'appareil, pas de scrutation.
+
+    Indisponible quand l'imprimante ne répond plus : une valeur affichée
+    alors qu'elle est absente induit en erreur.
+    """
 
     _attr_has_entity_name = True
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_should_poll = False
 
+    @property
+    def available(self) -> bool:
+        return self._printer.available
+
     def __init__(self, entry: ConfigEntry, printer: MiniPocketPrinter,
-                 key: str, name: str) -> None:
+                 key: str) -> None:
         self._printer = printer
         self._entry = entry
         self._attr_unique_id = f"{entry.entry_id}_{key}"
-        self._attr_name = name
+        self._attr_translation_key = key
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
             connections={(CONNECTION_BLUETOOTH,
@@ -220,8 +234,7 @@ class PrinterLastPrintSensor(_PrinterEntity):
     _attr_icon = "mdi:receipt-text-clock"
 
     def __init__(self, entry: ConfigEntry, printer: MiniPocketPrinter) -> None:
-        super().__init__(entry, printer, "last_print", "Derniere impression")
-        self._attr_translation_key = "last_print"
+        super().__init__(entry, printer, "last_print")
 
     @property
     def native_value(self):
@@ -241,8 +254,7 @@ class PrinterRssiSensor(_PrinterEntity):
     _attr_suggested_display_precision = 0
 
     def __init__(self, entry: ConfigEntry, printer: MiniPocketPrinter) -> None:
-        super().__init__(entry, printer, "rssi", "Signal")
-        self._attr_translation_key = "rssi"
+        super().__init__(entry, printer, "rssi")
 
     @property
     def native_value(self) -> int | None:
@@ -271,7 +283,7 @@ class PrinterRssiSensor(_PrinterEntity):
 
     @property
     def available(self) -> bool:
-        return self._printer.rssi is not None
+        return self._printer.available and self._printer.rssi is not None
 
 
 class PrinterQueueSensor(_PrinterEntity):
@@ -285,8 +297,7 @@ class PrinterQueueSensor(_PrinterEntity):
     _attr_native_unit_of_measurement = "travaux"
 
     def __init__(self, entry: ConfigEntry, printer: MiniPocketPrinter) -> None:
-        super().__init__(entry, printer, "queue", "File d'attente")
-        self._attr_translation_key = "queue"
+        super().__init__(entry, printer, "queue")
 
     @property
     def native_value(self) -> int:
@@ -294,8 +305,16 @@ class PrinterQueueSensor(_PrinterEntity):
 
     @property
     def extra_state_attributes(self) -> dict:
+        if self._printer.reading:
+            nature = "lecture"
+        elif self._printer.busy:
+            nature = "impression"
+        else:
+            nature = "repos"
         return {
             "en_cours": 1 if self._printer.busy else 0,
+            "nature": nature,
             "en_attente": self._printer.queued,
-            "limite": self._printer.queue_limit or "illimitee",
+            "limite": self._printer.queue_limit or "illimitée",
+            "peremption_heures": self._printer.job_ttl or "aucune",
         }

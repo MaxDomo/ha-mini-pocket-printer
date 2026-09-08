@@ -18,10 +18,13 @@ CONF_TRANSPORT = "transport"
 # Auto par défaut : USB s'il est configuré, puis Bluetooth classique, puis
 # BLE. L'imprimante se deplace, le bon transport dépend de l'endroit.
 DEFAULT_TRANSPORT = "auto"
-TRANSPORTS = ["ble", "spp", "usb", "auto"]
+TRANSPORTS = ["ble", "usb", "auto"]
 
 CONF_USB_PATH = "usb_path"   # /dev/usb/lp0, /dev/ttyACM0 ou usb:001:007
 
+
+CONF_JOB_TTL = "job_ttl"
+DEFAULT_JOB_TTL = 0   # heures avant péremption d'un travail en attente, 0 = jamais
 
 CONF_KEEP_AWAKE = "keep_awake"
 DEFAULT_KEEP_AWAKE = 10   # minutes entre deux interrogations, 0 = aucune

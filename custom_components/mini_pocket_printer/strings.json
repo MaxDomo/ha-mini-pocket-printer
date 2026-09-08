@@ -13,7 +13,8 @@
     },
     "abort": {
       "no_devices_found": "Aucune imprimante detectee. Allumez-la et verifiez qu'aucun autre appareil ne la retient.",
-      "already_configured": "Cette imprimante est deja configuree."
+      "already_configured": "Cette imprimante est deja configuree.",
+      "face_classique": "Face Bluetooth classique ignorée : l'imprimante s'ajoute par son adresse BLE."
     }
   },
   "options": {
@@ -22,10 +23,62 @@
         "data": {
           "queue_limit": "Travaux maximum en file (0 = illimite)",
           "keep_awake": "Interrogation periodique, en minutes (0 = aucune)",
-          "transport": "Transport : ble, spp, usb ou auto",
-          "usb_path": "Peripherique USB (vide = aucun)"
+          "transport": "Transport : ble, usb ou auto",
+          "usb_path": "Peripherique USB (vide = aucun)",
+          "job_ttl": "Péremption des travaux en attente, en heures (0 = jamais)"
         },
         "description": "A n'activer que si vous n'avez qu'une seule imprimante : plusieurs exemplaires annoncent le meme nom."
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "battery": {
+        "name": "Batterie"
+      },
+      "last_print": {
+        "name": "Dernière impression"
+      },
+      "rssi": {
+        "name": "Signal"
+      },
+      "queue": {
+        "name": "File d'attente"
+      }
+    },
+    "binary_sensor": {
+      "paper": {
+        "name": "Papier"
+      }
+    },
+    "select": {
+      "density": {
+        "name": "Densité"
+      }
+    },
+    "number": {
+      "sleep": {
+        "name": "Mise en veille"
+      },
+      "queue_limit": {
+        "name": "Limite de file"
+      },
+      "keep_awake": {
+        "name": "Interrogation périodique"
+      },
+      "job_ttl": {
+        "name": "Péremption des travaux"
+      }
+    },
+    "button": {
+      "test": {
+        "name": "Ticket de test"
+      },
+      "cancel": {
+        "name": "Annuler la file"
+      },
+      "refresh": {
+        "name": "Relire les réglages"
       }
     }
   }

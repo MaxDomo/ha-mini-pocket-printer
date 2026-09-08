@@ -13,7 +13,11 @@ print_text:
       name: Texte
       description: Sauts de ligne autorisés. Les lignes trop larges sont repliées.
       required: true
-      example: "Liste des courses\nPain\nLait"
+      example: 'Liste des courses
+
+        Pain
+
+        Lait'
       selector:
         text:
           multiline: true
@@ -67,6 +71,13 @@ print_text:
         number:
           min: 0
           max: 255
+    wait:
+      name: Attendre la fin
+      description: Par défaut l'action rend la main aussitôt et l'impression se poursuit en
+        tâche de fond.
+      default: false
+      selector:
+        boolean: null
 print_table:
   name: Imprimer un tableau
   description: 'Compose un tableau : largeurs de colonnes déduites du contenu, cellules trop
@@ -140,6 +151,13 @@ print_table:
         number:
           min: 0
           max: 255
+    wait:
+      name: Attendre la fin
+      description: Par défaut l'action rend la main aussitôt et l'impression se poursuit en
+        tâche de fond.
+      default: false
+      selector:
+        boolean: null
 print_qr:
   name: Imprimer un QR code
   description: Génère un QR code centré, avec légende optionnelle.
@@ -214,6 +232,13 @@ print_qr:
         number:
           min: 0
           max: 255
+    wait:
+      name: Attendre la fin
+      description: Par défaut l'action rend la main aussitôt et l'impression se poursuit en
+        tâche de fond.
+      default: false
+      selector:
+        boolean: null
 print_barcode:
   name: Imprimer un code-barres
   description: 'Code-barres 1D mis à l''échelle sur la largeur du papier. Chaque symbologie
@@ -291,6 +316,13 @@ print_barcode:
         number:
           min: 0
           max: 255
+    wait:
+      name: Attendre la fin
+      description: Par défaut l'action rend la main aussitôt et l'impression se poursuit en
+        tâche de fond.
+      default: false
+      selector:
+        boolean: null
 print_image:
   name: Imprimer une image
   description: Redimensionne sur 384 px de large puis trame l'image.
@@ -332,6 +364,13 @@ print_image:
         number:
           min: 0
           max: 255
+    wait:
+      name: Attendre la fin
+      description: Par défaut l'action rend la main aussitôt et l'impression se poursuit en
+        tâche de fond.
+      default: false
+      selector:
+        boolean: null
 print_weather:
   name: Imprimer la meteo
   description: 'Compose un ticket à partir d''une entité weather : conditions du moment et
@@ -409,6 +448,13 @@ print_weather:
       default: true
       selector:
         boolean: null
+    wait:
+      name: Attendre la fin
+      description: Par défaut l'action rend la main aussitôt et l'impression se poursuit en
+        tâche de fond.
+      default: false
+      selector:
+        boolean: null
 cancel:
   name: Annuler la file d'attente
   description: 'Retire les travaux qui attendent leur tour. Le travail en cours n''est pas
@@ -441,3 +487,10 @@ feed:
         number:
           min: 1
           max: 255
+    wait:
+      name: Attendre la fin
+      description: Par défaut l'action rend la main aussitôt et l'impression se poursuit en
+        tâche de fond.
+      default: false
+      selector:
+        boolean: null

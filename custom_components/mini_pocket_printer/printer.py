@@ -18,7 +18,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import struct
+import time
 import zlib
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from collections.abc import Callable
 
@@ -29,7 +31,8 @@ from homeassistant.components import bluetooth
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 
-from . import spp, usb
+from . import usb
+from .addresses import ble_address, classic_address
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -40,6 +43,22 @@ class PrintCancelled(Exception):
 
 class QueueFull(Exception):
     """La file d'attente a atteint sa limite."""
+
+
+class PrintExpired(Exception):
+    """Le travail a attendu trop longtemps pour rester pertinent."""
+
+
+# Un contrôleur Bluetooth ne mène qu'une connexion à la fois de façon fiable :
+# deux imprimantes qui impriment ensemble via le même adaptateur se gênent.
+# Ce verrou partagé les sérialise, sans bloquer l'USB qui n'a pas ce défaut.
+_VERROUS_RADIO: dict[str, asyncio.Lock] = {}
+
+
+def _verrou_radio(cle: str) -> asyncio.Lock:
+    if cle not in _VERROUS_RADIO:
+        _VERROUS_RADIO[cle] = asyncio.Lock()
+    return _VERROUS_RADIO[cle]
 
 WRITE_UUID = "0000ff02-0000-1000-8000-00805f9b34fb"
 NOTIFY_UUID = "0000ff01-0000-1000-8000-00805f9b34fb"
@@ -96,7 +115,7 @@ class MiniPocketPrinter:
 
     def __init__(self, hass: HomeAssistant, address: str,
                  queue_limit: int = 5, transport: str = "ble",
-                 usb_path: str | None = None) -> None:
+                 usb_path: str | None = None, job_ttl: int = 0) -> None:
         self._hass = hass
         self.address = address
         # Renseigné uniquement si l'utilisateur accepté le suivi par nom.
@@ -105,6 +124,9 @@ class MiniPocketPrinter:
         # simultanees s'enchainent au lieu d'échouer, dans l'ordre d'arrivee.
         self._lock = asyncio.Lock()
         self._queued = 0
+        # Une lecture occupe la liaison autant qu'une impression : la
+        # signaler évite que l'interface paraisse inerte pendant un relevé.
+        self._lecture_en_cours = False
         # Incremente à chaque annulation : les travaux qui attendent le
         # verrou comparent ce jeton a celui note avant leur mise en file et
         # renoncent si quelqu'un a vide la file entre-temps.
@@ -116,19 +138,16 @@ class MiniPocketPrinter:
         # laisser une imprimante hors de portée accumuler des tickets qui
         # sortiraient tous d'un coup à son retour.
         self.queue_limit = queue_limit
-        # "ble" (défaut), "spp" (Bluetooth classique) ou "auto" : SPP quand la
-        # machine le permet, BLE sinon. Le SPP tient mieux le lien à distance
-        # mais exige un appairage BlueZ et un noyau avec RFCOMM.
+        # Heures au-delà desquelles un travail en attente n'a plus de sens :
+        # un ticket météo sorti six heures plus tard n'intéresse personne.
+        # 0 désactive la péremption.
+        self.job_ttl = job_ttl
+        # "ble", "usb" ou "auto" : USB quand un périphérique est
+        # configuré, BLE sinon.
         self.transport = transport
-        # Adresse du contrôleur local à utiliser en SPP. Sans elle, le noyau
-        # choisit, ce qui pose problème avec plusieurs adaptateurs : la clé
-        # d'appairage n'existe que sur celui qui a servi au pairage.
         # Chemin du périphérique USB, ex. /dev/usb/lp0 ou usb:001:007.
         self.usb_path = usb_path or None
-        self._spp: spp.SppConnection | None = None
         self._usb: usb.UsbConnection | None = None
-        # En mode auto : commence par le SPP, retient ce qui a marche.
-        self._auto_spp = True
         # Garde-fou contre les tentatives simultanees : deux connexions en
         # vol vers le même périphérique donnent EALREADY côté noyau.
         self._connecting = False
@@ -193,7 +212,7 @@ class MiniPocketPrinter:
         qui permet de placer un proxy utilement.
         """
         seen: list[dict] = []
-        for address in {self.address, spp.classic_address(self.address)}:
+        for address in {self.address, classic_address(self.address)}:
             for info in bluetooth.async_scanner_devices_by_address(
                 self._hass, address, connectable=False
             ):
@@ -211,8 +230,13 @@ class MiniPocketPrinter:
 
     @property
     def busy(self) -> bool:
-        """Vrai pendant une impression : le lien unique est occupe."""
+        """Vrai pendant une impression ou une lecture : le lien est occupé."""
         return self._lock.locked()
+
+    @property
+    def reading(self) -> bool:
+        """Vrai pendant un relevé, par opposition à une impression."""
+        return self._lecture_en_cours
 
     @property
     def queued(self) -> int:
@@ -222,7 +246,7 @@ class MiniPocketPrinter:
     @property
     def pending(self) -> int:
         """Total pris en charge : celui en cours plus ceux qui attendent."""
-        return self._queued
+        return self._queued + (1 if self._lecture_en_cours else 0)
 
     @property
     def status(self) -> str:
@@ -243,18 +267,12 @@ class MiniPocketPrinter:
     def available(self) -> bool:
         """Disponibilité apparente de l'imprimante.
 
-        En BLE, elle se déduit des annonces reçues. En SPP, il n'y a rien a
-        ecouter : le seul moyen de savoir est d'essayer de se connecter. On
-        la considère donc joignable, et l'échec eventuel survient au moment
-        de la connexion, avec un message explicite.
+        En BLE elle se déduit des annonces reçues ; en USB un périphérique
+        branché est toujours joignable, et l'échec survient à la connexion.
         """
         if self.transport == "usb" or (self.transport == "auto"
                                        and self.usb_path):
             # Un périphérique branche est toujours joignable.
-            return True
-        if self.transport in ("spp", "auto") and spp.is_supported():
-            # Le SPP n'a rien a ecouter : impossible de savoir sans essayer.
-            # En auto, le BLE reste tente en repli, donc on ne bloque pas.
             return True
         return self._resolve_device() is not None
 
@@ -264,7 +282,7 @@ class MiniPocketPrinter:
         L'entrée peut avoir été créée depuis l'une ou l'autre face : on
         cherche donc l'adresse BLE correspondante, pas celle enregistrée.
         """
-        for candidate in (spp.ble_address(self.address), self.address):
+        for candidate in (ble_address(self.address), self.address):
             device = bluetooth.async_ble_device_from_address(
                 self._hass, candidate, connectable=True
             )
@@ -295,49 +313,60 @@ class MiniPocketPrinter:
         """Transport de la connexion en cours, ou celui qui sera tente."""
         if self._usb is not None:
             return "usb"
-        if self._spp is not None:
-            return "spp"
         if self._client is not None:
             return "ble"
         if self.transport == "auto":
             if self.usb_path:
                 return "usb"
-            return "spp" if self._auto_spp and spp.is_supported() else "ble"
+            return "ble"
         return self.transport
 
     @property
-    def use_spp(self) -> bool:
-        """Transport classique retenu pour la prochaine connexion.
+    def _passe_par_la_radio(self) -> bool:
+        """Vrai si l'opération va mobiliser un contrôleur Bluetooth."""
+        if self.transport == "usb":
+            return False
+        if self.transport == "auto" and self.usb_path:
+            return False
+        return True
 
-        En mode auto, reflete le dernier transport ayant fonctionne : la
-        valeur sert d'affichage, la bascule reelle se fait à la connexion.
-        """
-        if self.transport == "spp":
-            return True
-        if self.transport == "auto":
-            return spp.is_supported() and self._auto_spp
-        return False
+    @asynccontextmanager
+    async def _session(self, lecture: bool = False):
+        """Réserve l'imprimante, et la radio quand elle est en jeu."""
+        if lecture:
+            self._lecture_en_cours = True
+            self.notify_listeners()
+        try:
+            async with self._lock:
+                if self._passe_par_la_radio:
+                    async with _verrou_radio("bluetooth"):
+                        yield
+                else:
+                    yield
+        finally:
+            if lecture:
+                self._lecture_en_cours = False
+                self.notify_listeners()
 
     async def _connect(self, max_attempts: int = 3) -> None:
         """Ouvre le lien, avec repli d'un transport sur l'autre en mode auto.
 
-        L'imprimante peut être pres du serveur, ou pres d'un proxy : le
-        transport qui convient dépend de l'endroit, pas de la machine. En
-        auto, on tente donc le classique puis le BLE, et l'ordre s'inverse
-        selon ce qui a fonctionne la dernière fois.
+        En auto, l'ordre suit la fiabilité constatée : USB d'abord quand un
+        périphérique est configuré, puis BLE. Le Bluetooth classique ne vient
+        qu'en dernier recours, et seulement si l'imprimante y est appairée :
+        l'essayer d'emblée coûtait plusieurs secondes à chaque ticket pour un
+        transport qui aboutit rarement.
         """
         if self.transport == "usb":
             await self._connect_via("usb", max_attempts)
             return
 
         if self.transport == "auto":
-            order = ["spp", "ble"] if self._auto_spp else ["ble", "spp"]
+            order = ["ble"]
             if self.usb_path:
                 # L'USB ne dépend ni de la portée ni d'un appairage : quand
                 # il est configuré, il passe avant tout le reste.
                 order.insert(0, "usb")
-            if not spp.is_supported():
-                order = [c for c in order if c != "spp"]
             errors = []
             for position, choice in enumerate(order):
                 # Une seule tentative sur le transport mémorisé : après un
@@ -346,23 +375,17 @@ class MiniPocketPrinter:
                 attempts = 1 if position == 0 else max_attempts
                 try:
                     await self._connect_via(choice, attempts)
-                    if (self._usb is None and self._spp is None
-                            and self._client is None):
+                    if self._usb is None and self._client is None:
                         raise HomeAssistantError(
                             f"{choice} : connexion annoncee mais aucun lien"
                         )
                     if choice != order[0]:
                         _LOGGER.info("%s : bascule sur le transport %s",
                                      self.address, choice.upper())
-                    self._auto_spp = choice == "spp"
                     return
                 except (BleakError, HomeAssistantError, OSError) as err:
                     errors.append(f"{choice} : {err}")
-                    # La préférence est oubliee des le premier échec : la
-                    # prochaine tentative commencera par l'autre transport.
-                    if position == 0:
-                        self._auto_spp = choice != "spp"
-                    _LOGGER.debug("%s : %s a echoue (%s)", self.address,
+                    _LOGGER.debug("%s : %s a échoué (%s)", self.address,
                                   choice, err)
             raise HomeAssistantError(
                 f"Aucun transport n'aboutit vers {self.address}. "
@@ -370,7 +393,7 @@ class MiniPocketPrinter:
             )
 
         await self._connect_via(
-            "spp" if self.use_spp else "ble", max_attempts
+            "ble", max_attempts
         )
 
     async def _connect_via(self, choice: str, max_attempts: int = 3) -> None:
@@ -407,72 +430,6 @@ class MiniPocketPrinter:
             self.notify_refused = False
             self._chunk = usb.CHUNK
             self._no_response = False
-            return
-
-        if choice == "spp":
-            if not spp.is_supported():
-                raise HomeAssistantError(
-                    "Transport classique indisponible : cette machine n'expose "
-                    "pas de socket RFCOMM (noyau ou build Python)"
-                )
-            # État d'appairage connu d'avance : cela évite un échec obscur
-            # et permet de choisir le bon contrôleur sans configuration.
-            state = await spp.async_pairing_state(self._hass, self.address)
-            classic = spp.classic_address(self.address)
-
-            if state["known"] and not state["paired"]:
-                raise HomeAssistantError(
-                    f"{classic} n'est appairee sur aucun controleur. "
-                    f"Appairez-la : bluetoothctl pair {classic} "
-                    f"puis trust {classic}"
-                )
-            if state["connected"]:
-                raise HomeAssistantError(
-                    f"{classic} a deja un lien classique ouvert via "
-                    f"{', '.join(state['connected'])}. Liberez-le : "
-                    f"bluetoothctl disconnect {classic}"
-                )
-
-            # Le contrôleur se déduit de l'appairage : celui qui porte la
-            # clé est le seul utilisable, le demander à l'utilisateur
-            # n'apportait qu'une source d'erreur.
-            adapter = state["paired"][0] if len(state["paired"]) == 1 else None
-            if adapter:
-                _LOGGER.debug("Controleur deduit : %s", adapter)
-
-            self._spp = spp.SppConnection(self._hass, self.address,
-                                          local_adapter=adapter)
-            try:
-                await self._spp.connect()
-            except OSError as err:
-                self._spp = None
-                if err.errno in (16, 114, 115):
-                    raise HomeAssistantError(
-                        f"Lien classique deja en cours ou occupe sur "
-                        f"{self.address} (erreur {err.errno}). Une tentative "
-                        "precedente n'est pas terminee, ou un autre appareil "
-                        "tient le lien. Attendez une trentaine de secondes, "
-                        "ou eteignez puis rallumez l'imprimante."
-                    ) from err
-                if err.errno == 112:
-                    raise HomeAssistantError(
-                        f"{self.address} injoignable en Bluetooth classique. "
-                        "Si BlueZ signale par ailleurs un lien deja etabli "
-                        "(br-connection-already-connected), une session "
-                        "residuelle occupe l'imprimante : "
-                        "bluetoothctl disconnect "
-                        f"{spp.classic_address(self.address)}"
-                    ) from err
-                raise HomeAssistantError(
-                    f"Connexion SPP vers {self.address} impossible : {err}"
-                ) from err
-            # Le SPP n'a pas de descripteur a activer : les réponses arrivent
-            # sur le même flux, donc les lectures sont toujours disponibles.
-            self._notify = True
-            self.notify_refused = False
-            self._chunk = spp.CHUNK
-            self._no_response = False
-            await asyncio.sleep(0.3)
             return
 
         # Résolution à chaque connexion : l'imprimante s'endort, disparait,
@@ -557,14 +514,6 @@ class MiniPocketPrinter:
                 _LOGGER.debug("Fermeture USB imparfaite", exc_info=True)
             return
 
-        if self._spp is not None:
-            connection, self._spp = self._spp, None
-            try:
-                await connection.close()
-            except Exception:  # noqa: BLE001 - fermeture best effort
-                _LOGGER.debug("Fermeture SPP imparfaite", exc_info=True)
-            return
-
         client, self._client = self._client, None
         if client is not None:
             try:
@@ -575,7 +524,7 @@ class MiniPocketPrinter:
     # -- primitives ---------------------------------------------------------
 
     async def _send(self, data: bytes, bulk: bool = False, delay: float = 0.01) -> None:
-        if self._usb is None and self._spp is None and self._client is None:
+        if self._usb is None and self._client is None:
             # Sans lien établi, écrire ne produirait qu'une erreur d'attribut
             # illisible. Le cas survient quand une connexion a échoue sans
             # que l'appelant l'ait vu.
@@ -587,10 +536,6 @@ class MiniPocketPrinter:
             await self._usb.send(data, delay=delay)
             return
 
-        if self._spp is not None:
-            await self._spp.send(data, delay=delay)
-            return
-
         without = self._no_response and bulk
         for index in range(0, len(data), self._chunk):
             await self._client.write_gatt_char(
@@ -600,16 +545,13 @@ class MiniPocketPrinter:
                 await asyncio.sleep(delay)
 
     async def _query(self, cmd: bytes, timeout: float = 3.0) -> bytes:
-        if self._usb is None and self._spp is None and self._client is None:
+        if self._usb is None and self._client is None:
             raise HomeAssistantError(
                 f"Aucune connexion ouverte vers {self.address}"
             )
 
         if self._usb is not None:
             return await self._usb.query(cmd, timeout=timeout)
-
-        if self._spp is not None:
-            return await self._spp.query(cmd, timeout=timeout)
 
         if not self._notify:
             await self._send(cmd, delay=0)
@@ -645,18 +587,6 @@ class MiniPocketPrinter:
             )
             return True
 
-        if self._spp is not None:
-            loop = asyncio.get_running_loop()
-            deadline = loop.time() + timeout
-            buffer = bytearray()
-            while loop.time() < deadline:
-                chunk = await self._spp.read(timeout=1.0)
-                if chunk:
-                    buffer += chunk
-                    if DONE_MARKER in bytes(buffer):
-                        return True
-            return False
-
         if not self._notify:
             return True
         loop = asyncio.get_running_loop()
@@ -683,7 +613,7 @@ class MiniPocketPrinter:
         if not self.available:
             raise HomeAssistantError(f"Imprimante {self.address} hors de portee")
 
-        async with self._lock:
+        async with self._session(lecture=True):
             try:
                 # Un proxy ESPHome raté souvent la première tentative
                 # (ESP_GATT_ERROR) et aboutit à la seconde.
@@ -737,6 +667,33 @@ class MiniPocketPrinter:
                 await self._disconnect()
                 self.notify_listeners()
 
+    def surveiller_presence(self) -> Callable[[], None]:
+        """Prévient les entités dès que l'imprimante apparaît ou disparaît.
+
+        Sans cela, une imprimante éteinte laisse ses entités affichées avec
+        leurs dernières valeurs jusqu'au prochain événement.
+        """
+        annuler = [
+            bluetooth.async_register_callback(
+                self._hass,
+                lambda info, change: self.notify_listeners(),
+                {"address": self.address, "connectable": False},
+                bluetooth.BluetoothScanningMode.ACTIVE,
+            ),
+            bluetooth.async_track_unavailable(
+                self._hass,
+                lambda info: self.notify_listeners(),
+                self.address,
+                connectable=False,
+            ),
+        ]
+
+        def _retirer() -> None:
+            for fonction in annuler:
+                fonction()
+
+        return _retirer
+
     def add_listener(self, callback: Callable[[], None]) -> Callable[[], None]:
         """Enregistré un abonne et retourne la fonction de desabonnement."""
         self._listeners.append(callback)
@@ -779,7 +736,7 @@ class MiniPocketPrinter:
 
     async def async_read_settings(self) -> None:
         """Relit densité et délai de mise en veille."""
-        async with self._lock:
+        async with self._session(lecture=True):
             try:
                 await self._connect(max_attempts=2)
                 if not self._notify:
@@ -811,7 +768,7 @@ class MiniPocketPrinter:
         écriture refusée par le firmware passerait inapercue et l'interface
         afficherait une valeur que l'imprimante n'a jamais adoptee.
         """
-        async with self._lock:
+        async with self._session():
             try:
                 await self._connect(max_attempts=2)
                 payload = command + bytes([value & 0xFF])
@@ -876,21 +833,28 @@ class MiniPocketPrinter:
             )
 
         token = self._cancel_token
+        depose = time.time()
         self._queued += 1
         # La file bouge à l'entrée, à la prise du verrou et à la sortie :
         # sans notification a chacun de ces moments, le capteur n'affiché le
         # changement qu'au prochain cycle d'une minute.
         self.notify_listeners()
         try:
-            return await self._async_print_guarded(rows, feed, block, token)
+            return await self._async_print_guarded(rows, feed, block, token,
+                                                   depose)
         finally:
             self._queued -= 1
             self.notify_listeners()
 
     async def _async_print_guarded(self, rows: list[bytes], feed: int,
-                                   block: int, token: int = 0) -> bool:
+                                   block: int, token: int = 0,
+                                   depose: float | None = None) -> bool:
         try:
-            done = await self._async_print(rows, feed, block, token=token)
+            done = await self._async_print(rows, feed, block, token=token,
+                                           depose=depose)
+        except PrintExpired as err:
+            _LOGGER.warning("%s : %s", self.address, err)
+            return False
         except PrintCancelled:
             # Annulation volontaire : ni erreur a mémoriser, ni reprise.
             return False
@@ -906,7 +870,7 @@ class MiniPocketPrinter:
             await asyncio.sleep(3)
             try:
                 done = await self._async_print(rows, feed, block, safe=True,
-                                               token=token)
+                                               token=token, depose=depose)
             except Exception as retry_err:  # noqa: BLE001
                 self.last_error = str(retry_err)
                 raise
@@ -925,8 +889,9 @@ class MiniPocketPrinter:
 
     async def _async_print(self, rows: list[bytes], feed: int,
                            block: int, safe: bool = False,
-                           token: int | None = None) -> bool:
-        async with self._lock:
+                           token: int | None = None,
+                           depose: float | None = None) -> bool:
+        async with self._session():
             self.notify_listeners()
             if token is not None and token != self._cancel_token:
                 _LOGGER.debug("%s : travail annule pendant l'attente", self.address)
@@ -1016,12 +981,18 @@ class MiniPocketPrinter:
         affiché, pour qu'aucune valeur ne provienne d'un relevé ancien, et
         remet à zéro le compteur d'inactivite du firmware.
         """
-        if self.busy or self._connecting or not self.available:
+        if self.busy or self._connecting:
             # Une impression ou une autre lecture est en cours : inutile
-            # d'ouvrir un second lien, l'imprimante n'en accepté qu'un.
+            # d'ouvrir un second lien, l'imprimante n'en accepte qu'un.
+            _LOGGER.debug("%s : interrogation reportee, liaison occupee",
+                          self.address)
+            return False
+        if not self.available:
+            _LOGGER.debug("%s : interrogation reportee, imprimante absente",
+                          self.address)
             return False
 
-        async with self._lock:
+        async with self._session(lecture=True):
             try:
                 await self._connect(max_attempts=1)
                 status = await self._query(CMD_STATUS, timeout=2.0)

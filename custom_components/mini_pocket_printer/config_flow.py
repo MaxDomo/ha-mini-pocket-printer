@@ -19,13 +19,15 @@ from homeassistant.config_entries import (
 from homeassistant.core import callback
 from homeassistant.const import CONF_ADDRESS, CONF_NAME
 
-from .spp import classic_address
+from .addresses import classic_address
 from .usb import list_devices
 from .const import (
+    CONF_JOB_TTL,
     CONF_KEEP_AWAKE,
     CONF_QUEUE_LIMIT,
     CONF_TRANSPORT,
     CONF_USB_PATH,
+    DEFAULT_JOB_TTL,
     DEFAULT_KEEP_AWAKE,
     DEFAULT_QUEUE_LIMIT,
     DEFAULT_TRANSPORT,
@@ -46,14 +48,22 @@ class MiniPocketPrinterConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_bluetooth(
         self, discovery_info: BluetoothServiceInfoBleak
     ) -> ConfigFlowResult:
-        """L'imprimante s'est annoncee et Home Assistant la propose."""
+        """L'imprimante s'est annoncée et Home Assistant la propose.
+
+        Seule la face BLE est retenue : c'est elle qui porte le service GATT,
+        et l'intégration en déduit l'adresse classique quand elle en a besoin.
+        """
+        if not discovery_info.address.upper().startswith("5E"):
+            return self.async_abort(reason="face_classique")
+
         # L'imprimante expose deux faces : BLE en 5E:55:... et classique en
         # 55:55:... Elles se resolvent vers la même adresse classique, qui
         # sert donc d'identifiant unique : une seule entrée pour l'appareil.
+        # updates= réécrivait l'adresse de l'entrée existante à chaque
+        # annonce de l'autre face : l'entrée basculait de 5E:... à 55:... et
+        # la découverte d'un nouvel exemplaire passait inaperçue.
         await self.async_set_unique_id(classic_address(discovery_info.address))
-        self._abort_if_unique_id_configured(
-            updates={CONF_ADDRESS: discovery_info.address}
-        )
+        self._abort_if_unique_id_configured()
         self._discovery = discovery_info
         self.context["title_placeholders"] = {"name": discovery_info.name}
         return await self.async_step_confirm()
@@ -63,7 +73,7 @@ class MiniPocketPrinterConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         assert self._discovery is not None
         if user_input is not None:
-            suffix = self._discovery.address.replace(":", "")[-4:]
+            suffix = classic_address(self._discovery.address).replace(":", "")[-4:]
             return self.async_create_entry(
                 title=f"{self._discovery.name or 'Mini Pocket Printer'} {suffix}",
                 data={
@@ -175,7 +185,8 @@ class MiniPocketPrinterOptionsFlow(OptionsFlow):
                     default=options.get(CONF_QUEUE_LIMIT, DEFAULT_QUEUE_LIMIT),
                 ): vol.All(int, vol.Range(min=0, max=50)),
                 vol.Optional(
-                    CONF_KEEP_AWAKE,
+                    CONF_JOB_TTL,
+    CONF_KEEP_AWAKE,
                     default=options.get(CONF_KEEP_AWAKE, DEFAULT_KEEP_AWAKE),
                 ): vol.All(int, vol.Range(min=0, max=60)),
             }),

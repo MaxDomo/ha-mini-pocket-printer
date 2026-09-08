@@ -47,6 +47,9 @@
       },
       "keep_awake": {
         "default": "mdi:timer-sync-outline"
+      },
+      "job_ttl": {
+        "default": "mdi:timer-sand"
       }
     }
   },

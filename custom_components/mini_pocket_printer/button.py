@@ -15,6 +15,7 @@ from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, MANUFACTURER, MODEL
 from .printer import DENSITY_LEVELS, MiniPocketPrinter
+from .ha_logo import logo_rows
 from .table_render import build_table_rows
 
 _LOGGER = logging.getLogger(__name__)
@@ -35,7 +36,7 @@ class PrinterTestButton(ButtonEntity):
     """Imprime un état des lieux : liaison, firmware, batterie, signal."""
 
     _attr_has_entity_name = True
-    _attr_name = "Ticket de test"
+    _attr_translation_key = "test"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_icon = "mdi:printer-check"
 
@@ -87,7 +88,7 @@ class PrinterTestButton(ButtonEntity):
             ["Date", dt_util.now().strftime("%d/%m/%Y %H:%M")],
         ]
         bitmap = await self.hass.async_add_executor_job(
-            lambda: build_table_rows(
+            lambda: logo_rows(88) + build_table_rows(
                 rows, title="TICKET DE TEST", align=["left", "right"],
                 size=28, grid=False,
             )
@@ -100,7 +101,7 @@ class PrinterCancelButton(ButtonEntity):
     """Vide la file d'attente sans toucher au travail en cours."""
 
     _attr_has_entity_name = True
-    _attr_name = "Annuler la file"
+    _attr_translation_key = "cancel"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_icon = "mdi:playlist-remove"
 
@@ -124,7 +125,7 @@ class PrinterRefreshButton(ButtonEntity):
     """Relit densité, veille, batterie et statut depuis l'imprimante."""
 
     _attr_has_entity_name = True
-    _attr_name = "Relire les reglages"
+    _attr_translation_key = "refresh"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_icon = "mdi:refresh"
 

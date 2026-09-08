@@ -1,7 +1,7 @@
 # Mini Pocket Printer
 
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
-[![Version](https://img.shields.io/badge/version-1.0.0--beta-orange.svg)](https://github.com/MaxDomo/ha-mini-pocket-printer/releases)
+[![Version](https://img.shields.io/badge/version-1.1.0--beta-orange.svg)](https://github.com/MaxDomo/ha-mini-pocket-printer/releases)
 [![Licence](https://img.shields.io/badge/licence-MIT-green.svg)](LICENSE)
 
 Imprimez depuis Home Assistant sur les petites imprimantes thermiques
@@ -9,7 +9,7 @@ Imprimez depuis Home Assistant sur les petites imprimantes thermiques
 « Mini Pocket Printer ».
 
 Texte, tableaux, images, QR codes, codes-barres, et un ticket météo illustré.
-En USB, en Bluetooth classique ou en BLE.
+En USB — le plus fiable — ou en BLE via un proxy Bluetooth.
 
 [![Ouvrir dans HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=MaxDomo&repository=ha-mini-pocket-printer&category=integration)
 
@@ -61,6 +61,11 @@ data:
 | `cancel` | vide la file d'attente |
 
 Toutes acceptent `device_id`, `size`, `font` et `feed`.
+
+**Les actions rendent la main aussitôt.** Une impression prend plusieurs
+secondes, et une automatisation n'a pas à rester suspendue pendant ce temps :
+le travail part en tâche de fond, les échecs sont journalisés. Ajoutez
+`wait: true` quand vous voulez que l'action attende et remonte l'erreur.
 
 ### Exemples
 
@@ -139,19 +144,18 @@ s'ajustent automatiquement à la police et à la taille choisies.
 
 ## Transports
 
-L'imprimante se pilote par trois chemins, avec le **même protocole**. Le choix
-se fait dans les options de l'entrée.
+Deux chemins, avec le **même protocole**. Le choix se fait dans les options de
+l'entrée.
 
 | Valeur | Quand l'utiliser |
 | ------ | ---------------- |
 | `usb` | imprimante branchée au serveur — le plus fiable |
 | `ble` | imprimante à distance, via un proxy Bluetooth |
-| `spp` | Bluetooth classique, meilleure portée que le BLE |
-| `auto` | **par défaut** : USB, puis classique, puis BLE |
+| `auto` | **par défaut** : USB si un périphérique est configuré, BLE sinon |
 
-En `auto`, le transport qui a fonctionné est réessayé en premier la fois
-suivante, et une seule tentative lui est accordée : après un déplacement de
-l'imprimante, la bascule est immédiate.
+L'imprimante expose aussi une face Bluetooth classique en SPP. Elle n'est pas
+prise en charge : l'appairage manuel, le canal qui reste occupé et l'absence
+de relais par les proxys la rendaient trop instable pour être proposée.
 
 ### USB
 
@@ -173,24 +177,6 @@ L'entité **Signal** indique où elle est entendue, et avec quelle puissance.
 Au-dessus de -80 dBm la connexion tient, en dessous de -90 elle devient
 aléatoire.
 
-### Bluetooth classique
-
-Meilleure portée que le BLE, mais exigeant : l'imprimante doit être **appairée
-dans BlueZ**, et la machine doit disposer d'un socket RFCOMM.
-
-```bash
-bluetoothctl
-pair 55:55:09:13:85:57
-trust 55:55:09:13:85:57
-```
-
-L'adresse classique se déduit de l'adresse BLE en remplaçant `5E` par `55`.
-L'intégration le fait toute seule, et choisit le contrôleur qui porte la clé
-d'appairage.
-
-Les proxys ESPHome ne relaient pas le Bluetooth classique : ce transport passe
-forcément par un adaptateur du serveur.
-
 ---
 
 ## Entités
@@ -201,6 +187,7 @@ forcément par un adaptateur du serveur.
 | Mise en veille | minutes avant extinction automatique |
 | Interrogation périodique | intervalle de rafraîchissement, 10 min par défaut |
 | Limite de file | travaux maximum en attente |
+| Péremption des travaux | heures avant abandon d'un travail en attente |
 | Batterie | pourcentage |
 | Papier | signale un rouleau absent |
 | Signal | puissance reçue, avec le détail par point d'écoute |
@@ -215,6 +202,13 @@ redémarrage et s'applique aussi quand vous imprimez depuis le téléphone.
 
 **Aucune valeur n'est mise en cache.** Une lecture qui échoue vide le champ
 plutôt que d'afficher un relevé ancien.
+
+**Tout passe en indisponible** quand l'imprimante n'est plus détectée. Les
+entités réagissent immédiatement, sans attendre un cycle : une valeur affichée
+alors que l'imprimante est absente induit en erreur.
+
+Les réglages de l'intégration — limite de file, péremption, interrogation
+périodique — restent modifiables, eux ne dépendent pas de l'imprimante.
 
 ---
 
@@ -240,9 +234,18 @@ data:
   text: Bonjour
 ```
 
-**Une entrée par imprimante.** Chacune expose deux faces Bluetooth, `5E:55:…`
-en BLE et `55:55:…` en classique. L'intégration les reconnaît comme un seul
-appareil.
+**Travaux périmés.** Un ticket du matin qui sortirait en fin de journée
+n'intéresse personne. **Péremption des travaux** fixe une durée en heures
+au-delà de laquelle un travail en attente est abandonné plutôt qu'imprimé.
+`0` les conserve indéfiniment.
+
+**Diagnostic.** La fiche de l'appareil propose « Télécharger le diagnostic » :
+un JSON avec le transport actif, la dernière erreur, l'état d'appairage, les
+points d'écoute et toutes les valeurs lues. À joindre à un rapport de bogue.
+
+**Une entrée par imprimante.** Chacune s'annonce sous deux adresses, `5E:55:…`
+et `55:55:…`. L'intégration les reconnaît comme un seul appareil, quelle que
+soit celle par laquelle elle a été découverte.
 
 ---
 

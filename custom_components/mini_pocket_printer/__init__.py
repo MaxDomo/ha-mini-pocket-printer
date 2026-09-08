@@ -24,10 +24,12 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.event import async_track_time_interval
 
 from .const import (
+    CONF_JOB_TTL,
     CONF_KEEP_AWAKE,
     CONF_QUEUE_LIMIT,
     CONF_TRANSPORT,
     CONF_USB_PATH,
+    DEFAULT_JOB_TTL,
     DEFAULT_KEEP_AWAKE,
     DEFAULT_QUEUE_LIMIT,
     DEFAULT_TRANSPORT,
@@ -57,6 +59,12 @@ PLATFORMS = [
     Platform.SENSOR,
 ]
 
+# Les services rendent la main sans attendre la fin de l'impression : un
+# ticket peut prendre plusieurs dizaines de secondes, et une automatisation
+# n'a pas à rester suspendue pendant ce temps. "wait" rétablit l'attente
+# quand on veut savoir si le travail a abouti.
+ATTENTE_SCHEMA = {vol.Optional("wait", default=False): cv.boolean}
+
 TARGET_SCHEMA = {
     vol.Optional(ATTR_DEVICE_ID): vol.All(cv.ensure_list, [cv.string]),
     vol.Optional("entry_id"): cv.string,
@@ -64,6 +72,7 @@ TARGET_SCHEMA = {
 
 PRINT_TEXT_SCHEMA = vol.Schema({
     **TARGET_SCHEMA,
+    **ATTENTE_SCHEMA,
     vol.Required("text"): cv.string,
     vol.Optional("size", default=36): vol.All(int, vol.Range(min=8, max=96)),
     vol.Optional("font"): cv.string,
@@ -75,6 +84,7 @@ PRINT_TEXT_SCHEMA = vol.Schema({
 
 PRINT_TABLE_SCHEMA = vol.Schema({
     **TARGET_SCHEMA,
+    **ATTENTE_SCHEMA,
     vol.Required("rows"): vol.All(cv.ensure_list, [vol.All(cv.ensure_list, [
         vol.Any(cv.string, int, float, None)
     ])]),
@@ -92,6 +102,7 @@ PRINT_TABLE_SCHEMA = vol.Schema({
 
 PRINT_QR_SCHEMA = vol.Schema({
     **TARGET_SCHEMA,
+    **ATTENTE_SCHEMA,
     vol.Required("data"): cv.string,
     vol.Optional("scale", default=8): vol.All(int, vol.Range(min=2, max=16)),
     vol.Optional("border", default=2): vol.All(int, vol.Range(min=0, max=8)),
@@ -104,6 +115,7 @@ PRINT_QR_SCHEMA = vol.Schema({
 
 PRINT_BARCODE_SCHEMA = vol.Schema({
     **TARGET_SCHEMA,
+    **ATTENTE_SCHEMA,
     vol.Required("data"): cv.string,
     vol.Optional("symbology", default="code128"): cv.string,
     vol.Optional("height", default=90): vol.All(int, vol.Range(min=30, max=300)),
@@ -116,6 +128,7 @@ PRINT_BARCODE_SCHEMA = vol.Schema({
 
 PRINT_IMAGE_SCHEMA = vol.Schema({
     **TARGET_SCHEMA,
+    **ATTENTE_SCHEMA,
     vol.Exclusive("path", "source"): cv.string,
     vol.Exclusive("url", "source"): cv.url,
     vol.Optional("threshold"): vol.All(int, vol.Range(min=0, max=255)),
@@ -125,6 +138,7 @@ PRINT_IMAGE_SCHEMA = vol.Schema({
 
 PRINT_WEATHER_SCHEMA = vol.Schema({
     **TARGET_SCHEMA,
+    **ATTENTE_SCHEMA,
     vol.Required("weather_entity"): cv.entity_id,
     vol.Optional("days", default=4): vol.All(int, vol.Range(min=0, max=7)),
     vol.Optional("title", default="METEO"): cv.string,
@@ -139,6 +153,7 @@ CANCEL_SCHEMA = vol.Schema({**TARGET_SCHEMA})
 
 FEED_SCHEMA = vol.Schema({
     **TARGET_SCHEMA,
+    **ATTENTE_SCHEMA,
     vol.Optional("dots", default=80): vol.All(int, vol.Range(min=1, max=255)),
 })
 
@@ -158,10 +173,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         queue_limit=entry.options.get(CONF_QUEUE_LIMIT, DEFAULT_QUEUE_LIMIT),
         transport=entry.options.get(CONF_TRANSPORT, DEFAULT_TRANSPORT),
         usb_path=entry.options.get(CONF_USB_PATH) or None,
+        job_ttl=entry.options.get(CONF_JOB_TTL, DEFAULT_JOB_TTL),
     )
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = printer
+    entry.async_on_unload(printer.surveiller_presence())
 
     keep_awake = entry.options.get(CONF_KEEP_AWAKE, DEFAULT_KEEP_AWAKE)
     if keep_awake:
@@ -175,6 +192,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             async_track_time_interval(
                 hass, _touch, timedelta(minutes=keep_awake)
             )
+        )
+        # Première interrogation sans attendre l'échéance : sinon les valeurs
+        # restent vides pendant tout le premier intervalle.
+        hass.async_create_background_task(
+            _touch(None), f"{entry.entry_id} premiere interrogation"
         )
 
     _async_cleanup_devices(hass, entry)
@@ -223,8 +245,13 @@ async def async_remove_config_entry_device(
 
 
 async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Recharge après modification des options."""
-    await hass.config_entries.async_reload(entry.entry_id)
+    """Recharge après modification des options.
+
+    async_schedule_reload plutôt qu'async_reload : recharger depuis l'écouteur
+    lui-même provoque un avertissement de Home Assistant, l'entrée étant
+    encore en cours de mise à jour au moment de l'appel.
+    """
+    hass.config_entries.async_schedule_reload(entry.entry_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -288,23 +315,41 @@ def _resolve_all(hass: HomeAssistant, call: ServiceCall) -> list[MiniPocketPrint
 
 async def _print_on_all(hass: HomeAssistant, call: ServiceCall,
                         rows: list[bytes], feed: int) -> None:
-    """Imprime le même document sur chaque imprimante ciblee.
+    """Imprime le même document sur chaque imprimante ciblée.
 
-    Les erreurs sont regroupees : une imprimante éteinte n'empeche pas les
-    autres d'imprimer, mais l'action signale quand même l'échec.
+    Rend la main immédiatement, sauf si l'appel demande à attendre : un ticket
+    prend plusieurs secondes et une automatisation n'a pas à rester suspendue.
+    Les erreurs sont regroupées, une imprimante éteinte n'empêchant pas les
+    autres d'imprimer.
     """
-    failures: list[str] = []
-    for printer in _resolve_all(hass, call):
-        try:
-            if not await printer.async_print(rows, feed=feed):
-                failures.append(f"{printer.address} : fin non confirmee")
-        except QueueFull as err:
-            failures.append(str(err))
-        except Exception as err:  # noqa: BLE001 - rapporte a l'appelant
-            failures.append(f"{printer.address} : {err}")
+    printers = _resolve_all(hass, call)
 
-    if failures:
-        raise HomeAssistantError(" | ".join(failures))
+    async def _travail() -> list[str]:
+        echecs: list[str] = []
+        for printer in printers:
+            try:
+                if not await printer.async_print(rows, feed=feed):
+                    echecs.append(f"{printer.address} : fin non confirmée")
+            except QueueFull as err:
+                echecs.append(str(err))
+            except Exception as err:  # noqa: BLE001 - rapporté à l'appelant
+                echecs.append(f"{printer.address} : {err}")
+        return echecs
+
+    if not call.data.get("wait"):
+        async def _en_fond() -> None:
+            for message in await _travail():
+                _LOGGER.warning("Impression : %s", message)
+
+
+        hass.async_create_background_task(
+            _en_fond(), f"{DOMAIN} impression {call.service}"
+        )
+        return
+
+    echecs = await _travail()
+    if echecs:
+        raise HomeAssistantError(" | ".join(echecs))
 
 
 def _async_register_services(hass: HomeAssistant) -> None:
@@ -439,14 +484,31 @@ def _async_register_services(hass: HomeAssistant) -> None:
         _LOGGER.info("%d travail(s) en attente annule(s)", total)
 
     async def handle_feed(call: ServiceCall) -> None:
-        failures = []
-        for printer in _resolve_all(hass, call):
-            try:
-                await printer.async_feed(call.data["dots"])
-            except Exception as err:  # noqa: BLE001
-                failures.append(f"{printer.address} : {err}")
-        if failures:
-            raise HomeAssistantError(" | ".join(failures))
+        printers = _resolve_all(hass, call)
+        dots = call.data["dots"]
+
+        async def _travail() -> list[str]:
+            echecs = []
+            for printer in printers:
+                try:
+                    await printer.async_feed(dots)
+                except Exception as err:  # noqa: BLE001
+                    echecs.append(f"{printer.address} : {err}")
+            return echecs
+
+        if not call.data.get("wait"):
+            async def _en_fond() -> None:
+                for message in await _travail():
+                    _LOGGER.warning("Avance papier : %s", message)
+
+            hass.async_create_background_task(
+                _en_fond(), f"{DOMAIN} avance papier"
+            )
+            return
+
+        echecs = await _travail()
+        if echecs:
+            raise HomeAssistantError(" | ".join(echecs))
 
     hass.services.async_register(
         DOMAIN, SERVICE_PRINT_TEXT, handle_print_text, schema=PRINT_TEXT_SCHEMA

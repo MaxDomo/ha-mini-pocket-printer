@@ -14,12 +14,12 @@
     "bluetooth_adapters"
   ],
   "documentation": "https://github.com/MaxDomo/ha-mini-pocket-printer",
-  "iot_class": "local_polling",
+  "iot_class": "local_push",
   "issue_tracker": "https://github.com/MaxDomo/ha-mini-pocket-printer/issues",
   "requirements": [
     "bleak-retry-connector>=3.5.0",
     "qrcode>=7.4",
     "python-barcode>=0.15"
   ],
-  "version": "1.0.0-beta"
+  "version": "1.1.0-beta"
 }

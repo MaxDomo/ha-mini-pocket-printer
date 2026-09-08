@@ -26,7 +26,7 @@ class PrinterDensitySelect(SelectEntity):
     """Trois niveaux, comme dans l'application officielle."""
 
     _attr_has_entity_name = True
-    _attr_name = "Densite"
+    _attr_translation_key = "density"
     _attr_entity_category = EntityCategory.CONFIG
     _attr_options = LABELS
     _attr_should_poll = False
@@ -63,7 +63,7 @@ class PrinterDensitySelect(SelectEntity):
 
     @property
     def available(self) -> bool:
-        return self._printer.density is not None
+        return self._printer.available and self._printer.density is not None
 
     @property
     def current_option(self) -> str | None:
