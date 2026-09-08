@@ -153,9 +153,29 @@ l'entrée.
 | `ble` | imprimante à distance, via un proxy Bluetooth |
 | `auto` | **par défaut** : USB si un périphérique est configuré, BLE sinon |
 
-L'imprimante expose aussi une face Bluetooth classique en SPP. Elle n'est pas
-prise en charge : l'appairage manuel, le canal qui reste occupé et l'absence
-de relais par les proxys la rendaient trop instable pour être proposée.
+### Et le Bluetooth classique ?
+
+L'imprimante expose une troisième face, en SPP sur le profil série. Elle a été
+prise en charge jusqu'à la version 1.0.0-beta, puis **retirée en 1.1.0-beta**
+faute de fiabilité.
+
+Ce qui n'allait pas :
+
+- l'appairage devait être fait à la main dans BlueZ, et n'existait que sur le
+  contrôleur qui l'avait effectué ;
+- le canal RFCOMM restait occupé plusieurs dizaines de secondes après une
+  coupure, bloquant toute nouvelle tentative ;
+- une session `bluetoothctl` ouverte suffisait à tout bloquer ;
+- les proxys ESPHome ne le relaient pas : tout passait par un adaptateur du
+  serveur, donc par sa portée ;
+- le comportement variait selon la version de BlueZ et du noyau.
+
+Le SPP portait mieux que le BLE sur quelques mètres, mais l'USB rend ce seul
+avantage inutile quand l'imprimante est près du serveur, et un proxy le rend
+inutile quand elle est loin.
+
+Si vous l'utilisiez, passez le transport sur `usb`, `ble` ou `auto` : la valeur
+`spp` n'existe plus et l'entrée retomberait sur le comportement par défaut.
 
 ### USB
 
